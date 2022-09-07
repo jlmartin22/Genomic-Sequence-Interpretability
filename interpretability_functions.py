@@ -7,8 +7,11 @@ Description:
 
 import os
 import numpy as np
+import pandas as pd
+import random
 import pickle
 import torch
+import torch.nn as nn
 from simdna import synthetic as sn
 from scipy.stats import wilcoxon
 from itertools import combinations
@@ -18,7 +21,7 @@ from CNN_Model import ConvNet, init_weights
 def parse_args():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--model",
+    parser.add_argument("-mod", "--model",
                         default="Model/best_model.pt", type=str,
                         help="File path for model")
     parser.add_argument("-p", "--preds",
@@ -30,10 +33,27 @@ def parse_args():
     parser.add_argument("-m", "--motifs",
                         default=["STAT_known2", "CTCF_known1"], type=str, nargs="*",
                         help="Motif(s) to be included in the tested.")
+    parser.add_argument("-bd", "--background_dist",
+                        default=20, type=float, nargs="*",
+                        help="List of values that represent the distribution of ACGT for the background sequence. Values must add to 1.")
     parser.add_argument("-np", "--num_perturbs",
                         default=5, type=int,
                         help="Number of perturbations for the interpretability functions.")
     return parser.parse_args()
+
+class seq_data(torch.utils.data.Dataset):
+
+    def __init__(self, dat):
+        self.x_data= torch.Tensor(dat[0])
+        self.y_data = torch.Tensor(dat[1])
+        self.len=len(self.x_data)
+      
+
+    def __getitem__(self, index):
+        return self.x_data[index], self.y_data[index]
+
+    def __len__(self):
+        return self.len
 
 def test_perturb(test_dat, model):
     model.eval()
@@ -123,6 +143,8 @@ def test_perturbed_loss(model, test_output, test_type, motifs, seq_dict, num_per
         num_perturbs: number of times to perturb the sequence
     Returns: difference between loss of original function and the average loss of function when sequences are perturbed
     """
+    criterion = nn.CrossEntropyLoss()
+    
     model.eval()
     with torch.no_grad():
         loss_diff = []
@@ -170,6 +192,8 @@ def test_perturbed_interact_loss(model, test_dat, motifs, seq_dict, num_perturbs
     loss_diff = []
     motif_A = motifs[0]
     motif_B = motifs[1]
+    
+    criterion = nn.CrossEntropyLoss()
     
     for seq_info in test_dat:
         p_loss = []
@@ -249,6 +273,7 @@ if __name__ == '__main__':
     pred_path = args.preds
     seq_dict_path = args.seq_dict
     motifs = args.motifs
+    background_vals = args.background_dist
     num_perturbs = args.num_perturbs
     
     model = ConvNet(200, 20, 0.1, 32, 12, 2)
@@ -259,7 +284,9 @@ if __name__ == '__main__':
         data_dict = pickle.load(handle)
     seq_dict = data_dict['seq_dict']
     
+    background_dist = dict(zip(['A','C','G','T'], background_vals))
+    
     results = test_significance(model, preds, seq_dict, motifs, num_perturbs)
     
-    with open(os.path.join(proj_dir,'Output', 'interpret_results.csv'), 'wb') as file:
-            pickle.dump(results, file)
+    results_df = pd.DataFrame(results, columns = ['test', 'effect_size', 'count', 'avg_loss', 'p_value'])
+    results_df.to_csv(os.path.join(proj_dir,'Output', 'interpret_results.csv'), index=False)
