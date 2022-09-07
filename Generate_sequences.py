@@ -141,7 +141,7 @@ if __name__ == '__main__':
     background_vals = args.background_dist
     pos_motifs = args.pos_motifs
     
-    assert sum(background_vals) == 1.0, "Background distribution must sum to 1"
+#     assert np.round(sum(background_vals),2) == 1.0, f'Background distribution percentages sum to {sum(background_vals)}. They must sum to 1.'
     background_dist = dict(zip(['A','C','G','T'], background_vals))
     
     # generate sequences
